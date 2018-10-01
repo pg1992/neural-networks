@@ -144,8 +144,30 @@ function ret = d_loss_by_d_model(model, data, wd_coefficient)
 % The returned object is supposed to be exactly like parameter <model>, i.e. it has fields ret.input_to_hid and ret.hid_to_class. However, the contents of those matrices are gradients (d loss by d model parameter), instead of model parameters.
 
 % This is the only function that you're expected to change. Right now, it just returns a lot of zeros, which is obviously not the correct output. Your job is to replace that by a correct computation.
-ret.input_to_hid = model.input_to_hid * 0;
-ret.hid_to_class = model.hid_to_class * 0;
+
+x = data.inputs;
+g = model.input_to_hid;
+o = logistic(g * x);
+h = model.hid_to_class;
+a = h * o;
+s = exp(a - repmat(log_sum_exp_over_rows(a), [size(a, 1), 1]));
+t = data.targets;
+
+[n_class, n_hid] = size(h);
+[n_input, n_data] = size(x);
+
+dh = zeros(size(h));
+dg = zeros(size(g));
+
+for i = 1:n_data
+    dh = dh - repmat(t(:, i) - s(:, i), [1, n_hid]) .* repmat(o(:, i)', [n_class, 1]);
+    dg = dg - repmat(sum(repmat(t(:, i) - s(:, i), [1, n_hid]) .* h, 1)' .* o(:, i) .* (1 - o(:, i)), [1, n_input]) .* repmat(x(:, i)', [n_hid, 1]);
+end
+
+wd_grad = theta_to_model(model_to_theta(model) * wd_coefficient);
+
+ret.input_to_hid = wd_grad.input_to_hid + dg / n_data;
+ret.hid_to_class = wd_grad.hid_to_class + dh / n_data;
 end
 
 function ret = model_to_theta(model)
